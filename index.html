@@ -1,131 +1,318 @@
 <!DOCTYPE html>
-<html lang="he">
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Mini GTA - מאפס</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mini GTA 6 - עיר פתוחה</title>
     <style>
-        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: Arial, sans-serif; flex-direction: column; }
-        canvas { background: #444; border: 3px solid #fff; }
-        .controls { margin-top: 10px; text-align: center; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 16px;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            background: #3b6e3b;
+            border: 3px solid #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, .8);
+        }
+        .controls { margin-top: 10px; text-align: center; font-size: 14px; line-height: 1.7; }
     </style>
 </head>
 <body>
-
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas" width="800" height="600" aria-label="משחק עיר פתוחה"></canvas>
     <div class="controls">
-        תנועה: <b>חצים</b> | כניסה / יציאה מרכב: <b>מקש E</b> | ירי (ברגל): <b>רווח (Space)</b>
+        תנועה/נהיגה: <b>חצים</b> | כניסה/יציאה מרכב: <b>E</b> |
+        ירי: <b>רווח (Space)</b> | איפוס משטרה: <b>C</b>
     </div>
 
     <script>
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
+        const WORLD_SIZE = 2000;
 
-        // הגדרות שחקן
-        let player = { x: 200, y: 300, size: 15, speed: 3, inCar: false, color: "#00ffcc" };
-        
-        // הגדרות רכב
-        let car = { x: 350, y: 300, width: 45, height: 25, angle: 0, speed: 0, maxSpeed: 7, color: "#ff3333" };
+        const player = {
+            x: 400, y: 400, size: 14, speed: 3.5, angle: 0,
+            inCar: false, color: "#00ffcc", money: 0, wanted: 0
+        };
+        const car = {
+            x: 500, y: 400, width: 48, height: 26, angle: 0,
+            speed: 0, maxSpeed: 8, color: "#ff2a2a"
+        };
+        const copCar = {
+            x: 1200, y: 1200, width: 48, height: 26,
+            angle: 0, maxSpeed: 6.5
+        };
+        const bullets = [];
+        const peds = [];
+        const buildings = [
+            { x: 100, y: 100, w: 200, h: 200, color: "#555" },
+            { x: 650, y: 100, w: 300, h: 200, color: "#666" },
+            { x: 100, y: 550, w: 200, h: 300, color: "#4a4a4a" },
+            { x: 650, y: 550, w: 300, h: 300, color: "#5a5a5a" },
+            { x: 1100, y: 100, w: 350, h: 350, color: "#505050" },
+            { x: 1100, y: 600, w: 350, h: 350, color: "#606060" }
+        ];
 
-        // רשימת קליעים
-        let bullets = [];
+        for (let i = 0; i < 25; i++) {
+            peds.push({
+                x: Math.random() * WORLD_SIZE,
+                y: Math.random() * WORLD_SIZE,
+                size: 12,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                color: "#ffcc99"
+            });
+        }
 
-        // מעקב אחרי מקשים לחוצים
-        let keys = {};
-        window.addEventListener("keydown", (e) => {
-            keys[e.code] = true;
-            // כניסה ויציאה מרכב בלחיצה על E
-            if (e.code === "KeyE") toggleCar();
-            // ירי בלחיצה על רווח
-            if (e.code === "Space" && !player.inCar) shoot();
+        const keys = {};
+        window.addEventListener("keydown", (event) => {
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+                event.preventDefault();
+            }
+            keys[event.code] = true;
+            if (event.repeat) return;
+            if (event.code === "KeyE") toggleCar();
+            if (event.code === "Space" && !player.inCar) shoot();
+            if (event.code === "KeyC") player.wanted = 0;
         });
-        window.addEventListener("keyup", (e) => keys[e.code] = false);
+        window.addEventListener("keyup", (event) => { keys[event.code] = false; });
+        window.addEventListener("blur", () => {
+            for (const key in keys) keys[key] = false;
+        });
 
         function toggleCar() {
             if (!player.inCar) {
-                // בדיקת מרחק מהרכב
-                let dist = Math.hypot(player.x - car.x, player.y - car.y);
-                if (dist < 60) {
+                if (Math.hypot(player.x - car.x, player.y - car.y) < 65) {
                     player.inCar = true;
+                    player.x = car.x;
+                    player.y = car.y;
                 }
             } else {
-                // יציאה מהרכב
                 player.inCar = false;
-                player.x = car.x - 30;
-                player.y = car.y;
+                player.x = car.x - Math.sin(car.angle) * 35;
+                player.y = car.y + Math.cos(car.angle) * 35;
+                player.x = Math.max(player.size, Math.min(WORLD_SIZE - player.size, player.x));
+                player.y = Math.max(player.size, Math.min(WORLD_SIZE - player.size, player.y));
                 car.speed = 0;
             }
         }
 
         function shoot() {
-            bullets.push({ x: player.x, y: player.y, speed: 10 });
+            bullets.push({
+                x: player.x + Math.cos(player.angle) * player.size,
+                y: player.y + Math.sin(player.angle) * player.size,
+                vx: Math.cos(player.angle) * 12,
+                vy: Math.sin(player.angle) * 12,
+                life: 60
+            });
+            if (player.wanted < 5) player.wanted = Math.max(player.wanted, 1);
+        }
+
+        function hitsBuilding(x, y, radius) {
+            return buildings.some((building) =>
+                x + radius > building.x && x - radius < building.x + building.w &&
+                y + radius > building.y && y - radius < building.y + building.h
+            );
         }
 
         function update() {
             if (!player.inCar) {
-                // תנועה ברגל
-                if (keys["ArrowUp"]) player.y -= player.speed;
-                if (keys["ArrowDown"]) player.y += player.speed;
-                if (keys["ArrowLeft"]) player.x -= player.speed;
-                if (keys["ArrowRight"]) player.x += player.speed;
-            } else {
-                // נהיגה ברכב
-                if (keys["ArrowUp"]) car.speed = Math.min(car.speed + 0.2, car.maxSpeed);
-                else if (keys["ArrowDown"]) car.speed = Math.max(car.speed - 0.2, -car.maxSpeed / 2);
-                else car.speed *= 0.95; // חיכוך והאטה טבעית
+                let dx = 0;
+                let dy = 0;
+                if (keys.ArrowUp) dy -= player.speed;
+                if (keys.ArrowDown) dy += player.speed;
+                if (keys.ArrowLeft) dx -= player.speed;
+                if (keys.ArrowRight) dx += player.speed;
 
-                if (Math.abs(car.speed) > 0.1) {
-                    if (keys["ArrowLeft"]) car.angle -= 0.05 * Math.sign(car.speed);
-                    if (keys["ArrowRight"]) car.angle += 0.05 * Math.sign(car.speed);
+                if (dx !== 0 || dy !== 0) {
+                    // Normalize diagonal movement so it is not faster than straight movement.
+                    const length = Math.hypot(dx, dy);
+                    dx = dx / length * player.speed;
+                    dy = dy / length * player.speed;
+                    player.angle = Math.atan2(dy, dx);
+                    const nextX = Math.max(player.size, Math.min(WORLD_SIZE - player.size, player.x + dx));
+                    const nextY = Math.max(player.size, Math.min(WORLD_SIZE - player.size, player.y + dy));
+                    if (!hitsBuilding(nextX, player.y, player.size)) player.x = nextX;
+                    if (!hitsBuilding(player.x, nextY, player.size)) player.y = nextY;
+                }
+            } else {
+                if (keys.ArrowUp) car.speed = Math.min(car.speed + 0.25, car.maxSpeed);
+                else if (keys.ArrowDown) car.speed = Math.max(car.speed - 0.25, -car.maxSpeed / 2);
+                else car.speed *= 0.95;
+
+                if (Math.abs(car.speed) > 0.2) {
+                    if (keys.ArrowLeft) car.angle -= 0.05 * Math.sign(car.speed);
+                    if (keys.ArrowRight) car.angle += 0.05 * Math.sign(car.speed);
                 }
 
-                car.x += Math.cos(car.angle) * car.speed;
-                car.y += Math.sin(car.angle) * car.speed;
-
-                // השחקן זז יחד עם הרכב
+                const nextX = car.x + Math.cos(car.angle) * car.speed;
+                const nextY = car.y + Math.sin(car.angle) * car.speed;
+                if (nextX >= 20 && nextX <= WORLD_SIZE - 20 && nextY >= 20 && nextY <= WORLD_SIZE - 20 &&
+                    !hitsBuilding(nextX, nextY, 20)) {
+                    car.x = nextX;
+                    car.y = nextY;
+                } else {
+                    car.speed = -car.speed * 0.5;
+                }
                 player.x = car.x;
                 player.y = car.y;
             }
 
-            // עדכון מיקום קליעים
+            for (let i = peds.length - 1; i >= 0; i--) {
+                const ped = peds[i];
+                ped.x += ped.vx;
+                ped.y += ped.vy;
+                if (hitsBuilding(ped.x, ped.y, ped.size) || ped.x < ped.size || ped.x > WORLD_SIZE - ped.size) ped.vx *= -1;
+                if (hitsBuilding(ped.x, ped.y, ped.size) || ped.y < ped.size || ped.y > WORLD_SIZE - ped.size) ped.vy *= -1;
+                ped.x = Math.max(ped.size, Math.min(WORLD_SIZE - ped.size, ped.x));
+                ped.y = Math.max(ped.size, Math.min(WORLD_SIZE - ped.size, ped.y));
+
+                if (player.inCar && Math.abs(car.speed) > 2 && Math.hypot(ped.x - car.x, ped.y - car.y) < 30) {
+                    peds.splice(i, 1);
+                    player.money += 50;
+                    player.wanted = Math.min(5, player.wanted + 1);
+                }
+            }
+
             for (let i = bullets.length - 1; i >= 0; i--) {
-                bullets[i].x += bullets[i].speed;
-                if (bullets[i].x > canvas.width) bullets.splice(i, 1);
+                const bullet = bullets[i];
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                bullet.life--;
+                if (hitsBuilding(bullet.x, bullet.y, 4) || bullet.life <= 0 ||
+                    bullet.x < 0 || bullet.x > WORLD_SIZE || bullet.y < 0 || bullet.y > WORLD_SIZE) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                let hitPed = false;
+                for (let j = peds.length - 1; j >= 0; j--) {
+                    if (Math.hypot(bullet.x - peds[j].x, bullet.y - peds[j].y) < 16) {
+                        peds.splice(j, 1);
+                        player.money += 100;
+                        player.wanted = Math.min(5, player.wanted + 1);
+                        hitPed = true;
+                        break;
+                    }
+                }
+                if (hitPed) bullets.splice(i, 1);
+            }
+
+            if (player.wanted > 0) {
+                copCar.angle = Math.atan2(player.y - copCar.y, player.x - copCar.x);
+                const copSpeed = copCar.maxSpeed * (0.6 + player.wanted * 0.1);
+                const nextX = copCar.x + Math.cos(copCar.angle) * copSpeed;
+                const nextY = copCar.y + Math.sin(copCar.angle) * copSpeed;
+                if (nextX >= 24 && nextX <= WORLD_SIZE - 24 && nextY >= 24 && nextY <= WORLD_SIZE - 24 &&
+                    !hitsBuilding(nextX, nextY, 24)) {
+                    copCar.x = nextX;
+                    copCar.y = nextY;
+                }
             }
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const camX = Math.max(0, Math.min(WORLD_SIZE - canvas.width, player.x - canvas.width / 2));
+            const camY = Math.max(0, Math.min(WORLD_SIZE - canvas.height, player.y - canvas.height / 2));
 
-            // ציור כביש בסיסי
-            ctx.fillStyle = "#333";
-            ctx.fillRect(0, 220, canvas.width, 160);
-
-            // ציור הרכב (עם סיבוב)
             ctx.save();
-            ctx.translate(car.x, car.y);
-            ctx.rotate(car.angle);
-            ctx.fillStyle = car.color;
-            ctx.fillRect(-car.width / 2, -car.height / 2, car.width, car.height);
-            // שמשה קדמית
-            ctx.fillStyle = "#222";
-            ctx.fillRect(5, -car.height / 2 + 3, 10, car.height - 6);
-            ctx.restore();
+            ctx.translate(-camX, -camY);
 
-            // ציור השחקן (רק אם הוא מחוץ לרכב)
+            // Roads
+            ctx.fillStyle = "#2b2b2b";
+            ctx.fillRect(0, 350, WORLD_SIZE, 150);
+            ctx.fillRect(0, 950, WORLD_SIZE, 150);
+            ctx.fillRect(400, 0, 150, WORLD_SIZE);
+            ctx.fillRect(980, 0, 150, WORLD_SIZE);
+
+            // Road markings
+            ctx.strokeStyle = "#d8c76a";
+            ctx.lineWidth = 4;
+            ctx.setLineDash([24, 22]);
+            ctx.beginPath();
+            ctx.moveTo(0, 425); ctx.lineTo(WORLD_SIZE, 425);
+            ctx.moveTo(0, 1025); ctx.lineTo(WORLD_SIZE, 1025);
+            ctx.moveTo(475, 0); ctx.lineTo(475, WORLD_SIZE);
+            ctx.moveTo(1055, 0); ctx.lineTo(1055, WORLD_SIZE);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            buildings.forEach((building) => {
+                ctx.fillStyle = building.color;
+                ctx.fillRect(building.x, building.y, building.w, building.h);
+                ctx.strokeStyle = "#222";
+                ctx.lineWidth = 4;
+                ctx.strokeRect(building.x, building.y, building.w, building.h);
+            });
+
+            peds.forEach((ped) => {
+                ctx.fillStyle = ped.color;
+                ctx.beginPath();
+                ctx.arc(ped.x, ped.y, ped.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            drawCar(car.x, car.y, car.width, car.height, car.angle, car.color, false);
+            if (player.wanted > 0) {
+                drawCar(copCar.x, copCar.y, copCar.width, copCar.height, copCar.angle, "#111", true);
+            }
+
             if (!player.inCar) {
                 ctx.fillStyle = player.color;
                 ctx.beginPath();
                 ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.strokeStyle = "#073b35";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y);
+                ctx.lineTo(player.x + Math.cos(player.angle) * 20, player.y + Math.sin(player.angle) * 20);
+                ctx.stroke();
             }
 
-            // ציור קליעים
             ctx.fillStyle = "yellow";
-            bullets.forEach(b => {
+            bullets.forEach((bullet) => {
                 ctx.beginPath();
-                ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
                 ctx.fill();
             });
+            ctx.restore();
+
+            ctx.direction = "ltr";
+            ctx.fillStyle = "#00ff00";
+            ctx.font = "bold 24px Arial";
+            ctx.fillText("$" + player.money, 20, 40);
+            ctx.fillStyle = player.wanted > 0 ? "#ffcc00" : "#555";
+            const stars = "★".repeat(player.wanted) + "☆".repeat(5 - player.wanted);
+            ctx.fillText(stars, canvas.width - 160, 40);
+            ctx.direction = "inherit";
+        }
+
+        function drawCar(x, y, width, height, angle, color, isCop) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.fillStyle = color;
+            ctx.fillRect(-width / 2, -height / 2, width, height);
+            ctx.fillStyle = "#88ccff";
+            ctx.fillRect(6, -height / 2 + 3, 10, height - 6);
+            if (isCop) {
+                ctx.fillStyle = Math.floor(Date.now() / 150) % 2 === 0 ? "red" : "blue";
+                ctx.fillRect(-4, -6, 8, 12);
+            }
+            ctx.restore();
         }
 
         function gameLoop() {
@@ -133,7 +320,6 @@
             draw();
             requestAnimationFrame(gameLoop);
         }
-
         gameLoop();
     </script>
 </body>
