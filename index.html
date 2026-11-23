@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini GTA - מאפס</title>
+    <style>
+        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: Arial, sans-serif; flex-direction: column; }
+        canvas { background: #444; border: 3px solid #fff; }
+        .controls { margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div class="controls">
+        תנועה: <b>חצים</b> | כניסה / יציאה מרכב: <b>מקש E</b> | ירי (ברגל): <b>רווח (Space)</b>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // הגדרות שחקן
+        let player = { x: 200, y: 300, size: 15, speed: 3, inCar: false, color: "#00ffcc" };
+        
+        // הגדרות רכב
+        let car = { x: 350, y: 300, width: 45, height: 25, angle: 0, speed: 0, maxSpeed: 7, color: "#ff3333" };
+
+        // רשימת קליעים
+        let bullets = [];
+
+        // מעקב אחרי מקשים לחוצים
+        let keys = {};
+        window.addEventListener("keydown", (e) => {
+            keys[e.code] = true;
+            // כניסה ויציאה מרכב בלחיצה על E
+            if (e.code === "KeyE") toggleCar();
+            // ירי בלחיצה על רווח
+            if (e.code === "Space" && !player.inCar) shoot();
+        });
+        window.addEventListener("keyup", (e) => keys[e.code] = false);
+
+        function toggleCar() {
+            if (!player.inCar) {
+                // בדיקת מרחק מהרכב
+                let dist = Math.hypot(player.x - car.x, player.y - car.y);
+                if (dist < 60) {
+                    player.inCar = true;
+                }
+            } else {
+                // יציאה מהרכב
+                player.inCar = false;
+                player.x = car.x - 30;
+                player.y = car.y;
+                car.speed = 0;
+            }
+        }
+
+        function shoot() {
+            bullets.push({ x: player.x, y: player.y, speed: 10 });
+        }
+
+        function update() {
+            if (!player.inCar) {
+                // תנועה ברגל
+                if (keys["ArrowUp"]) player.y -= player.speed;
+                if (keys["ArrowDown"]) player.y += player.speed;
+                if (keys["ArrowLeft"]) player.x -= player.speed;
+                if (keys["ArrowRight"]) player.x += player.speed;
+            } else {
+                // נהיגה ברכב
+                if (keys["ArrowUp"]) car.speed = Math.min(car.speed + 0.2, car.maxSpeed);
+                else if (keys["ArrowDown"]) car.speed = Math.max(car.speed - 0.2, -car.maxSpeed / 2);
+                else car.speed *= 0.95; // חיכוך והאטה טבעית
+
+                if (Math.abs(car.speed) > 0.1) {
+                    if (keys["ArrowLeft"]) car.angle -= 0.05 * Math.sign(car.speed);
+                    if (keys["ArrowRight"]) car.angle += 0.05 * Math.sign(car.speed);
+                }
+
+                car.x += Math.cos(car.angle) * car.speed;
+                car.y += Math.sin(car.angle) * car.speed;
+
+                // השחקן זז יחד עם הרכב
+                player.x = car.x;
+                player.y = car.y;
+            }
+
+            // עדכון מיקום קליעים
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].speed;
+                if (bullets[i].x > canvas.width) bullets.splice(i, 1);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ציור כביש בסיסי
+            ctx.fillStyle = "#333";
+            ctx.fillRect(0, 220, canvas.width, 160);
+
+            // ציור הרכב (עם סיבוב)
+            ctx.save();
+            ctx.translate(car.x, car.y);
+            ctx.rotate(car.angle);
+            ctx.fillStyle = car.color;
+            ctx.fillRect(-car.width / 2, -car.height / 2, car.width, car.height);
+            // שמשה קדמית
+            ctx.fillStyle = "#222";
+            ctx.fillRect(5, -car.height / 2 + 3, 10, car.height - 6);
+            ctx.restore();
+
+            // ציור השחקן (רק אם הוא מחוץ לרכב)
+            if (!player.inCar) {
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // ציור קליעים
+            ctx.fillStyle = "yellow";
+            bullets.forEach(b => {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
